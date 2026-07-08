@@ -1,0 +1,6 @@
+<form method="POST">
+    <select name="row_index">
+        {% for r in rows %}<option value="{{r}}">行: {{r}}</option>{% endfor %}
+    </select>
+    <button type="submit">PDF生成</button>
+</form>
