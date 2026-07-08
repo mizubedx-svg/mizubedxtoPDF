@@ -6,9 +6,12 @@ CSVアップロード -> 選択 -> PDFレポート生成 を行うFlaskアプリ
     2. temp_df が None の場合に PDF 生成ボタンを押してもエラーにならないようガード
     3. 処理を関数に分割し、コメントを整理して可読性を向上
     4. Flask のベストプラクティス（ロギング、設定の外出し、例外の種類ごとの分岐など）に沿って整理
+    5. 天気APIが失敗・'current'欠損しても、デフォルト値でPDF生成処理を続行できるようにする
+    6. Render等の本番環境を想定した設定（PORT環境変数、host=0.0.0.0、DEBUGの環境変数化）
 """
 
 import logging
+import os
 
 from flask import Flask, render_template, request, send_file
 import pandas as pd
@@ -24,8 +27,14 @@ app = Flask(__name__)
 app.config["DEFAULT_LAT"] = 35.61
 app.config["DEFAULT_LON"] = 139.62
 app.config["PDF_OUTPUT_PATH"] = "report.pdf"
+# SECRET_KEY はセッション等を使う場合に必須。本番では環境変数で必ず上書きする。
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
 
-logging.basicConfig(level=logging.INFO)
+# 本番(Render)ではログをstdoutに出し、PaaS側のログ収集に任せる
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 # 一時的なデータ保持用（本来は本番運用ではセッションやDBに置き換えるべき）
@@ -123,30 +132,41 @@ def handle_pdf_generation(selected_idx_raw):
     if row is None:
         return render_template("index.html", error="指定されたデータが見つかりません。")
 
+    # 外部APIからのデータ取得
+    # get_api_data は内部で例外を握りつぶし、失敗時はデフォルト値(is_available=False)を返す。
+    # そのため、ここでAPI取得に失敗してもPDF生成処理自体は続行できる。
+    api_data = get_api_data(app.config["DEFAULT_LAT"], app.config["DEFAULT_LON"])
+    if not api_data.get("is_available", False):
+        logger.warning("天気APIのデータが取得できなかったため、デフォルト値でPDFを生成します。")
+
+    # スコア計算
     try:
-        # 外部APIからのデータ取得
-        api_data = get_api_data(
-            app.config["DEFAULT_LAT"], app.config["DEFAULT_LON"]
-        )
-
-        # スコア計算
         score, level = calculate_score(row)
+    except Exception:
+        logger.exception("スコア計算中にエラーが発生しました。デフォルト値を使用します。")
+        score, level = 0, "算出不可"
 
-        # PDF生成用データ（row.get()で列が無くてもデフォルト値にフォールバック）
-        report_data = {
-            "score": score,
-            "flags": row.get("危険フラグ", "なし"),
-            "level": level,
-        }
+    # PDF生成用データ（row.get()で列が無くてもデフォルト値にフォールバック）
+    report_data = {
+        "score": score,
+        "flags": row.get("危険フラグ", "なし"),
+        "level": level,
+    }
 
+    try:
         generate_pdf(app.config["PDF_OUTPUT_PATH"], row, api_data, report_data)
-
         return send_file(app.config["PDF_OUTPUT_PATH"], as_attachment=True)
-
     except Exception as e:
         logger.exception("PDF生成中にエラーが発生しました")
         return f"PDF生成エラー: {e}", 500
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Render等のPaaSでは PORT 環境変数でリッスンポートが指定される。
+    # また debug=True は本番で使わない（環境変数 FLASK_DEBUG で制御）。
+    port = int(os.environ.get("PORT", 5000))
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
+
+# 本番運用では `python app.py` ではなく、Renderの起動コマンドを
+# 例: `gunicorn app:app --bind 0.0.0.0:$PORT` のようにWSGIサーバー経由にすることを推奨。
