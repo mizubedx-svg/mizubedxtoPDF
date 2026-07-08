@@ -1,6 +1,12 @@
-<form method="POST">
-    <select name="row_index">
-        {% for r in rows %}<option value="{{r}}">行: {{r}}</option>{% endfor %}
-    </select>
-    <button type="submit">PDF生成</button>
-</form>
+<!DOCTYPE html>
+<html>
+<body>
+    <h2>水辺リスクレポート生成</h2>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".csv" required><br>
+        <label>行番号（0から開始）:</label>
+        <input type="number" name="row_index" value="0" required><br>
+        <button type="submit">CSVを読み込みPDF生成</button>
+    </form>
+</body>
+</html>
