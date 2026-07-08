@@ -1,24 +1,30 @@
 from flask import Flask, render_template, request, send_file
 import pandas as pd
-import os
+import io
 from fetcher import get_api_data
 from analyzer import calculate_score
 from generator import generate_pdf
 
 app = Flask(__name__)
 
+# CSVの中身を一時保持する変数
+temp_df = None
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    global temp_df
     if request.method == 'POST':
-        # CSVがアップロードされたか確認
-        if 'file' not in request.files: return "ファイルがありません"
-        file = request.files['file']
-        df = pd.read_csv(file)
+        # 1. CSVアップロード時
+        if 'file' in request.files:
+            file = request.files['file']
+            temp_df = pd.read_csv(file)
+            # 日付とエリア列を表示用リストにする
+            options = temp_df.apply(lambda x: f"{x.iloc[0]} - {x.iloc[1]}", axis=1).tolist()
+            return render_template('index.html', options=options)
         
-        idx = int(request.form['row_index'])
-        row = df.iloc[idx]
-        
-        # ロジック実行
+        # 2. PDF生成時
+        idx = int(request.form['selected_idx'])
+        row = temp_df.iloc[idx]
         api_data = get_api_data(35.61, 139.62)
         score, level = calculate_score(row)
         
