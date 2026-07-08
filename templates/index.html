@@ -12,8 +12,8 @@
     {% if options %}
     <form method="POST">
         <select name="selected_idx">
-            {% for i, opt in enumerate(options) %}
-            <option value="{{i}}">{{opt}}</option>
+            {% for i in range(options|length) %}
+            <option value="{{i}}">{{ options[i] }}</option>
             {% endfor %}
         </select>
         <button type="submit">このデータでPDF生成</button>
