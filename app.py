@@ -5,8 +5,7 @@ from analyzer import calculate_score
 from generator import generate_pdf
 
 app = Flask(__name__)
-df = pd.read_csv('水辺リスク観測 mizubedx - フォームの回答 1 (2).csv')
-
+df = pd.read_csv('data.csv')
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
