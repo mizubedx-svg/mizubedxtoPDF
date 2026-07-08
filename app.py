@@ -47,18 +47,40 @@ temp_df = None
 def build_options_from_df(df: pd.DataFrame) -> list[str]:
     """
     アップロードされたCSVから選択肢の文字列リストを作る。
-    列名が不明・列数が足りない場合でも "不明" で埋めて処理を継続する。
+
+    「日付」「観測エリア」列を名前で探して表示する。
+    列名が変わっている・存在しない場合は先頭2列 → "不明" の順にフォールバックする。
     """
+    date_col = _find_first_matching_column(df, ["日付"])
+    area_col = _find_first_matching_column(df, ["観測エリア", "エリア"])
+
     options = []
     n_cols = df.shape[1]
 
     for i in range(len(df)):
         row = df.iloc[i]
-        date_val = row.iloc[0] if n_cols > 0 else "不明"
-        area_val = row.iloc[1] if n_cols > 1 else "不明"
+
+        if date_col is not None:
+            date_val = row.get(date_col, "不明")
+        else:
+            date_val = row.iloc[0] if n_cols > 0 else "不明"
+
+        if area_col is not None:
+            area_val = row.get(area_col, "不明")
+        else:
+            area_val = row.iloc[1] if n_cols > 1 else "不明"
+
         options.append(f"{date_val} - {area_val}")
 
     return options
+
+
+def _find_first_matching_column(df: pd.DataFrame, keywords: list[str]):
+    """列名に指定キーワードのいずれかを含む最初の列名を返す。見つからなければ None。"""
+    for column_name in df.columns:
+        if any(keyword in str(column_name) for keyword in keywords):
+            return column_name
+    return None
 
 
 def get_selected_row(df: pd.DataFrame, idx: int) -> pd.Series | None:
@@ -139,17 +161,17 @@ def handle_pdf_generation(selected_idx_raw):
     if not api_data.get("is_available", False):
         logger.warning("天気APIのデータが取得できなかったため、デフォルト値でPDFを生成します。")
 
-    # スコア計算
+    # スコア計算（score, level, flags の3つを返す仕様に対応）
     try:
-        score, level = calculate_score(row)
+        score, level, flags = calculate_score(row)
     except Exception:
         logger.exception("スコア計算中にエラーが発生しました。デフォルト値を使用します。")
-        score, level = 0, "算出不可"
+        score, level, flags = 0, "算出不可", "なし"
 
-    # PDF生成用データ（row.get()で列が無くてもデフォルト値にフォールバック）
+    # PDF生成用データ
     report_data = {
         "score": score,
-        "flags": row.get("危険フラグ", "なし"),
+        "flags": flags,
         "level": level,
     }
 
