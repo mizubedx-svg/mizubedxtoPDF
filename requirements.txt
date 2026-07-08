@@ -1,0 +1,7 @@
+Flask
+gunicorn
+pandas
+matplotlib
+reportlab
+requests
+google-generativeai
