@@ -11,7 +11,8 @@ app = Flask(__name__)
 temp_df = None
 
 @app.route('/', methods=['GET', 'POST'])
-def index():
+def index():# 読み込み直後にログを出す
+print(f"CSV Columns: {temp_df.columns}")
     global temp_df
     if request.method == 'POST':
         # 1. CSVアップロード時
