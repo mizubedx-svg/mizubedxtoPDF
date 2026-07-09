@@ -1,18 +1,17 @@
 """
 観測データからリスクスコアを計算し、必要に応じてAIによるサマリーを生成するモジュール。
 
-エリアごとに列名が異なる問題への対処は column_utils.py に切り出してある。
-本モジュールはそれを使って、
-    1. エリアを判定し、スコア項目（水位・流速・濁り・人の多さ・水際接近・滞留密度）を合算
-    2. 危険フラグの内容を取得（未入力なら「なし」）
-    3. リスクレベルを判定
-する。
+総合スコアは以下をすべて合算する（エリアごとに列名は column_utils が自動解決する）:
+    - 河川状況: 水位・流速・濁り
+    - 人的リスク（共通）: 人の多さ・水際接近・滞留密度
+    - 人的リスク（エリア固有）: BBQ場=飲酒レベル / 兵庫島1=保護者の監視レベル / 兵庫島2=対岸の状況影響
 
 改善点:
     1. エリア自動判定＋列名の自動マッチングにより、実際のCSV構造でも正しくスコアを計算
-    2. 数値変換できない値・列欠損があっても落ちないようにする（すべて0/デフォルト値にフォールバック）
-    3. 危険フラグは「チェックあり」ではなく「値が入っているかどうか」で判定する
-    4. get_ai_summary はAPIキー未設定・呼び出し失敗時にサーバーを落とさず、フォールバック文言を返す
+    2. エリア固有の追加リスク項目もスコアに含める（河川状況だけに偏らないようにする）
+    3. 数値変換できない値・列欠損があっても落ちないようにする（すべて0/デフォルト値にフォールバック）
+    4. 危険フラグは「チェックあり」ではなく「値が入っているかどうか」で判定する
+    5. get_ai_summary はAPIキー未設定・呼び出し失敗時にサーバーを落とさず、フォールバック文言を返す
 """
 
 import logging
@@ -21,7 +20,11 @@ import os
 import google.generativeai as genai
 
 from column_utils import (
+    AREA_EXTRA_RISK_FIELD,
     AREA_SELECT_COLUMN,
+    COMMON_HUMAN_SCORE_FIELDS,
+    DANGER_FLAG_KEYWORD,
+    RIVER_SCORE_FIELDS,
     extract_leading_int,
     find_column_for_field,
     resolve_area_key,
@@ -29,11 +32,12 @@ from column_utils import (
 
 logger = logging.getLogger(__name__)
 
-# スコアとして合算する項目（0〜3点の設問）
-SCORE_FIELD_KEYWORDS = ["水位", "流速", "濁り", "人の多さ", "水際接近", "滞留密度"]
-DANGER_FLAG_KEYWORD = "危険フラグ"
+# スコアとして合算する基本項目（0〜3点の設問、エリア固有の追加項目は別途加算する）
+BASE_SCORE_FIELD_KEYWORDS = RIVER_SCORE_FIELDS + COMMON_HUMAN_SCORE_FIELDS
 
+# スコアルール: この点数以上、または危険フラグに何か記入があれば「中リスク（注意）」
 HIGH_SCORE_THRESHOLD = 12
+
 FALLBACK_AI_SUMMARY = "AIサマリーは現在生成できませんでした。手動でご確認ください。"
 
 
@@ -46,7 +50,8 @@ def calculate_score(row):
     エリアごとに列名が異なるCSVでも正しく集計できる。
 
     戻り値: (score, level, flags)
-        score: 0〜3点の項目を合算した点数（列が見つからない場合はその項目を0点として扱う）
+        score: 河川状況＋人的リスク（共通＋エリア固有）を合算した点数
+               （列が見つからない場合はその項目を0点として扱う）
         level: "中リスク（注意）" または "低リスク"
         flags: 危険フラグの内容（未チェックの場合は "なし"）
     """
@@ -54,9 +59,9 @@ def calculate_score(row):
     if area_key is None:
         logger.warning("観測エリアが判定できないため、スコアは0として扱います。")
 
-    # --- スコア項目の合算 --------------------------------------------------------
+    # --- 基本スコア項目（河川状況＋人的リスク共通）の合算 --------------------------
     score = 0
-    for field_keyword in SCORE_FIELD_KEYWORDS:
+    for field_keyword in BASE_SCORE_FIELD_KEYWORDS:
         column_name = find_column_for_field(row.index, area_key, field_keyword)
         if column_name is None:
             logger.warning(
@@ -66,6 +71,19 @@ def calculate_score(row):
             )
             continue
         score += extract_leading_int(row.get(column_name))
+
+    # --- エリア固有の追加リスク項目を加算 -----------------------------------------
+    extra_field = AREA_EXTRA_RISK_FIELD.get(area_key)
+    if extra_field:
+        column_name = find_column_for_field(row.index, area_key, extra_field["keyword"])
+        if column_name is None:
+            logger.warning(
+                "エリア固有項目 '%s' に対応する列が見つかりませんでした（area=%s）。0点として扱います。",
+                extra_field["label"],
+                area_key,
+            )
+        else:
+            score += extract_leading_int(row.get(column_name))
 
     # --- 危険フラグの取得 ----------------------------------------------------------
     flag_column = find_column_for_field(row.index, area_key, DANGER_FLAG_KEYWORD)
