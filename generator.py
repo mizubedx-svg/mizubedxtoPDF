@@ -3,41 +3,42 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 def generate_pdf(filename, data, api_data, score_info):
-    """
-    CSVの行データ(data)からPDFを生成するモジュール。
-    data: pandas.Series (CSVの1行分)
-    """
     pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
     c = canvas.Canvas(filename)
     c.setFont("HeiseiMin-W3", 12)
 
-    # --- ヘッダー・基本情報 ---
-    date_val = data.get("日付", "不明")
-    time_val = data.get("時間", "不明")
-    c.drawString(100, 820, f"水辺リスクレポート: {date_val} {time_val}")
-    c.drawString(100, 800, f"観測員ID: {data.get('観測員ID', '不明')}")
+    # --- ヘッダー情報 ---
+    c.drawString(100, 820, f"水辺リスクレポート: {data.get('日付', '不明')}")
+    selected_area = data.get("【最重要】観測エリアを選択してください", "")
+    c.drawString(100, 800, f"エリア: {selected_area}")
 
-    # --- 天気情報（API連携用エリア） ---
-    temp = api_data.get("temp", "データなし")
-    humidity = api_data.get("humidity", "データなし")
-    c.drawString(100, 760, f"【気温】{temp}℃  【湿度】{humidity}%")
+    # --- エリア別のデータ取得ロジック ---
+    if "BBQ場" in selected_area:
+        水位 = data.get("(BBQ場 ) 水位 (0-3)  ", "0")
+        流速 = data.get("(BBQ場 )流速 (0-3)  ", "0")
+        濁り = data.get("(BBQ場 )濁り (0-3)  ", "0")
+        サマリー = data.get("  【BBQ場】一言サマリー   （任意）", "特記事項なし")
+        
+    elif "兵庫島公園1" in selected_area:
+        水位 = data.get("  【兵庫島公園1】水位（人工水路・ひょうたん池） (0-3)  ", "0")
+        流速 = data.get("  【兵庫島公園1】流速（野川・合流部手前） (0-3)  ", "0")
+        濁り = data.get("【兵庫島公園1】  濁り （野川・合流部手前） (0-3)  ", "0")
+        サマリー = data.get("  【兵庫島公園1】一言サマリー（任意） ", "特記事項なし")
 
-    # --- 河川状況（CSVの列名に正確に合わせる） ---
-    # ※CSVの列名（例: '(BBQ場 ) 水位 (0-3)  '）をそのままコピーしています
-    c.drawString(100, 720, "■ 河川状況（BBQ場）")
-    c.drawString(120, 700, f"水位: {data.get('(BBQ場 ) 水位 (0-3)  ', '0')}")
-    c.drawString(120, 680, f"流速: {data.get('(BBQ場 )流速 (0-3)  ', '0')}")
-    c.drawString(120, 660, f"濁り: {data.get('(BBQ場 )濁り (0-3)  ', '0')}")
-    c.drawString(120, 640, f"人の多さ: {data.get('(BBQ場）人の多さ', '0')}")
+    elif "兵庫島公園2" in selected_area or "兵庫島2" in selected_area:
+        # ※ここに兵庫島公園2の正確な列名を指定してください
+        水位 = data.get("【兵庫島公園2】水位 (0-3)  ", "0")
+        流速 = data.get("【兵庫島公園2】流速 (0-3)  ", "0")
+        濁り = data.get("【兵庫島公園2】濁り (0-3)  ", "0")
+        サマリー = data.get("【兵庫島公園2】一言サマリー ", "特記事項なし")
+    else:
+        水位, 流速, 濁り, サマリー = "不明", "不明", "不明", "データなし"
 
-    # --- 分析結果 ---
-    c.drawString(100, 600, "■ 分析結果")
-    c.drawString(120, 580, f"総合スコア: {score_info.get('score', 0)}")
-    c.drawString(120, 560, f"危険レベル: {score_info.get('level', '不明')}")
-    c.drawString(120, 540, f"危険フラグ: {score_info.get('flags', 'なし')}")
-
-    # --- サマリー ---
-    summary = data.get('  【BBQ場】一言サマリー   （任意）', '特記事項なし')
-    c.drawString(100, 500, f"■ サマリー: {summary}")
+    # --- PDF書き出し ---
+    c.drawString(100, 750, f"■ 河川状況（{selected_area}）")
+    c.drawString(120, 730, f"水位: {水位}")
+    c.drawString(120, 710, f"流速: {流速}")
+    c.drawString(120, 690, f"濁り: {濁り}")
+    c.drawString(100, 650, f"■ サマリー: {サマリー}")
 
     c.save()

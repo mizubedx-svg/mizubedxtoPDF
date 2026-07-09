@@ -1,23 +1,16 @@
 <!DOCTYPE html>
 <html>
 <body>
-    <h2>水辺リスクレポート生成</h2>
-    <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".csv">
-        <button type="submit">CSVを読み込む</button>
-    </form>
-
-    <hr>
-    
-    {% if options %}
+    <h1>観測レポート生成</h1>
     <form method="POST">
-        <select name="selected_idx">
-            {% for i in range(options|length) %}
-            <option value="{{i}}">{{ options[i] }}</option>
+        <select name="row_index">
+            {% for index, row in df.iterrows() %}
+                <option value="{{ index }}">
+                    {{ row['日付'] }} - {{ row['観測員ID'] }} ({{ row['（BBQ場 ） 時間帯  '] }})
+                </option>
             {% endfor %}
         </select>
-        <button type="submit">このデータでPDF生成</button>
+        <button type="submit">この行のPDFを作成</button>
     </form>
-    {% endif %}
 </body>
 </html>
