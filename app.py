@@ -27,7 +27,7 @@ from flask import Flask, render_template, request, send_file
 
 from analyzer import calculate_score
 from generator import generate_pdf
-from column_utils import AREA_DEFINITIONS, AREA_DISPLAY_NAMES
+from column_utils import AREA_DEFINITIONS, AREA_SELECT_LABELS
 from weekly_report_generator import (
     generate_weekly_area_report,
     generate_weekly_summary_report,
@@ -107,7 +107,7 @@ def index():
 def build_area_choices() -> list[dict]:
     """エリア選択プルダウン用の (内部キー, 表示名) の一覧を返す。"""
     return [
-        {"key": area_key, "label": AREA_DISPLAY_NAMES.get(area_key, area_key)}
+        {"key": area_key, "label": AREA_SELECT_LABELS.get(area_key, area_key)}
         for area_key in AREA_DEFINITIONS.keys()
     ]
 

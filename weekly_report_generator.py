@@ -42,12 +42,18 @@ def filter_by_date_range(df: pd.DataFrame, start_date, end_date) -> pd.DataFrame
     日付が解析できない行は集計対象から除外する（例外は投げない）。
 
     start_date / end_date: datetime.date
+
+    【注意】pandasのpd.to_datetime()は、Series全体をまとめて渡すと
+    「最初の値の書式」から日付フォーマットを推測し、以降の行がそのフォーマットと
+    異なる場合（例: 1行目が "2026/07/08"、5行目が "2026-07-07"）に、
+    本来パース可能な日付でも NaT（欠損）にしてしまうことがある。
+    これを避けるため、1件ずつ個別にパースする。
     """
     if DATE_COLUMN not in df.columns:
         logger.warning("日付列 '%s' がCSVに存在しません。空の結果を返します。", DATE_COLUMN)
         return df.iloc[0:0]
 
-    parsed_dates = pd.to_datetime(df[DATE_COLUMN], errors="coerce")
+    parsed_dates = df[DATE_COLUMN].apply(lambda value: pd.to_datetime(value, errors="coerce"))
     mask = (parsed_dates.dt.date >= start_date) & (parsed_dates.dt.date <= end_date)
     return df[mask]
 
