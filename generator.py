@@ -197,6 +197,11 @@ def generate_pdf(filename, data, score_info):
         c.drawString(x, y, text)
         y -= gap
 
+    def wrapped_line(text, x=PAGE_LEFT_MARGIN, size=12, gap=LINE_HEIGHT, width=WRAP_WIDTH):
+        """1行が長すぎる場合に複数行へ折り返して描画する。"""
+        for chunk in _wrap_text(text, width=width):
+            line(chunk, x=x, size=size, gap=gap)
+
     # --- ヘッダー ---------------------------------------------------------------
     line("水辺リスクレポート", size=16, gap=24)
     line(_build_report_id(date_raw), size=10, gap=20)
@@ -207,38 +212,37 @@ def generate_pdf(filename, data, score_info):
     )
 
     # --- 基本情報 ---------------------------------------------------------------
-    line(f"エリア： {area_display_name}")
-    line(f"日時： {_format_date_with_weekday(date_raw)} {time_raw}")
-    line(f"時間帯 {time_slot_value}")
-    line(f"天候 {weather_value}", gap=24)
+    wrapped_line(f"エリア： {area_display_name}")
+    wrapped_line(f"日時： {_format_date_with_weekday(date_raw)} {time_raw}")
+    wrapped_line(f"時間帯 {time_slot_value}")
+    wrapped_line(f"天候 {weather_value}", gap=24)
 
     # --- スコア・危険度 -----------------------------------------------------------
-    line(f"総合スコア {score}")
-    line(f"危険フラグ {flags}")
-    line(f"危険レベル {level}", gap=24)
+    wrapped_line(f"総合スコア {score}")
+    wrapped_line(f"危険フラグ {flags}")
+    wrapped_line(f"危険レベル {level}", gap=24)
 
     # --- 河川状況 ----------------------------------------------------------------
     line("■ 河川状況", size=12, gap=LINE_HEIGHT)
     for label, value in _get_river_condition_fields(data, area_key):
-        line(f"{label}： {value}")
+        wrapped_line(f"{label}： {value}")
     y -= 4
 
     # --- 人的リスク --------------------------------------------------------------
     line("■ 人的リスク", size=12, gap=LINE_HEIGHT)
     for label, value in _get_area_score_fields(data, area_key):
-        line(f"{label}： {value}")
+        wrapped_line(f"{label}： {value}")
     y -= 4
 
     # --- 事件・事故・トラブル・救助・等発生状況 -------------------------------------
     line("■ 事件・事故・トラブル・救助・等発生状況", size=12, gap=LINE_HEIGHT)
     for event_line in event_lines:
-        line(event_line)
+        wrapped_line(event_line)
     y -= 4
 
     # --- サマリー -----------------------------------------------------------------
     line("■ サマリー", size=12, gap=LINE_HEIGHT)
-    for summary_line in _wrap_text(summary_value):
-        line(summary_line)
+    wrapped_line(summary_value)
 
     # --- フッター（1ページ目） -----------------------------------------------------
     _draw_footer(c)
