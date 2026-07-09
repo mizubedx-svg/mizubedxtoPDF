@@ -33,6 +33,39 @@ AREA_DEFINITIONS = {
     "兵庫島2": ["兵庫島公園2", "兵庫島2"],
 }
 
+# レポートに表示するエリアの正式名称
+AREA_DISPLAY_NAMES = {
+    "BBQ場": "二子玉川バーベキュー場",
+    "兵庫島1": "兵庫島公園（人工水路・ひょうたん池）",
+    "兵庫島2": "兵庫島公園（多摩川本流）",
+}
+
+# --- スコア項目（0〜3点）の定義 ------------------------------------------------
+# 「河川状況」セクションに表示する項目（3エリア共通）
+RIVER_SCORE_FIELDS = ["水位", "流速", "濁り"]
+
+# 「人的リスク」セクションのうち、3エリア共通の項目
+COMMON_HUMAN_SCORE_FIELDS = ["人の多さ", "水際接近", "滞留密度"]
+
+# 「人的リスク」セクションのうち、エリア固有の追加項目
+# （BBQ場=飲酒レベル／兵庫島1=保護者の監視レベル／兵庫島2=対岸の状況影響、で列名が異なる）
+AREA_EXTRA_RISK_FIELD = {
+    "BBQ場": {"keyword": "飲酒", "label": "飲酒レベル"},
+    "兵庫島1": {"keyword": "監視レベル", "label": "保護者の監視レベル"},
+    "兵庫島2": {"keyword": "対岸", "label": "対岸（BBQ場側）の状況影響"},
+}
+
+# スコアに合算する全項目（河川状況＋人的リスク共通＋エリア固有）を返すヘルパーは
+# analyzer.py 側で AREA_EXTRA_RISK_FIELD と組み合わせて使う。
+
+# その他の項目キーワード
+TIME_SLOT_KEYWORD = "時間帯"
+WEATHER_KEYWORD = "天候"
+EVENT_KEYWORD = "イベント発生"
+SUMMARY_KEYWORD = "一言サマリー"
+DANGER_FLAG_KEYWORD = "危険フラグ"
+PHOTO_KEYWORD = "写真"
+
 
 def normalize(text) -> str:
     """
@@ -77,6 +110,18 @@ def find_column_for_field(row_index, area_key, field_keyword):
         if field_keyword in normalized_col and any(m in normalized_col for m in markers):
             return column_name
     return None
+
+
+def get_area_display_name(area_key, area_raw) -> str:
+    """
+    レポートに表示するエリア名を返す。
+    既知のエリアなら正式名称、未知の場合はCSVの生の値、それも無ければ "不明"。
+    """
+    if area_key and area_key in AREA_DISPLAY_NAMES:
+        return AREA_DISPLAY_NAMES[area_key]
+    if area_raw:
+        return str(area_raw)
+    return "不明"
 
 
 def extract_leading_int(value, default: int = 0) -> int:
