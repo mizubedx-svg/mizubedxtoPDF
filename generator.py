@@ -249,7 +249,8 @@ def generate_pdf(filename, data, score_info):
 
     c.showPage()
     c.setFont(FONT_NAME, 12)
-    c.drawString(PAGE_LEFT_MARGIN, PHOTO_TOP_Y, "■ 現場の写真")
+    report_id = _build_report_id(date_raw)
+    c.drawString(PAGE_LEFT_MARGIN, PHOTO_TOP_Y, f"■ 現場の写真　{report_id}")
 
     if not photo_url:
         c.setFont(FONT_NAME, 11)
