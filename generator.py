@@ -29,6 +29,7 @@ from column_utils import (
     AREA_EXTRA_RISK_FIELD,
     AREA_SELECT_COLUMN,
     COMMON_HUMAN_SCORE_FIELDS,
+    DATE_COLUMN,
     EVENT_KEYWORD,
     PHOTO_KEYWORD,
     RIVER_SCORE_FIELDS,
@@ -42,7 +43,6 @@ from column_utils import (
 from photo_utils import fetch_and_resize_image
 from reportlab.lib.utils import ImageReader
 
-DATE_COLUMN = "日付"
 TIME_COLUMN = "時間"
 
 # 曜日を丸囲み漢字で表示するためのテーブル（datetime.weekday(): 月=0 ... 日=6）

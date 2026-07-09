@@ -27,6 +27,11 @@ from flask import Flask, render_template, request, send_file
 
 from analyzer import calculate_score
 from generator import generate_pdf
+from column_utils import AREA_DEFINITIONS, AREA_DISPLAY_NAMES
+from weekly_report_generator import (
+    generate_weekly_area_report,
+    generate_weekly_summary_report,
+)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -79,14 +84,32 @@ def index():
         if uploaded_file and uploaded_file.filename != "":
             return handle_csv_upload(uploaded_file)
 
-        # --- 2. PDF生成 ----------------------------------------------------------
+        # --- 2. 週間レポート（全体サマリー） ------------------------------------------
+        if "summary_start" in request.form or "summary_end" in request.form:
+            return handle_weekly_summary_report()
+
+        # --- 3. 週間レポート（エリア別） --------------------------------------------
+        if "area_start" in request.form or "area_end" in request.form:
+            return handle_weekly_area_report()
+
+        # --- 4. PDF生成 ----------------------------------------------------------
         if "row_index" in request.form:
             return handle_pdf_generation()
 
     # --- GET（または上記どちらにも該当しないPOST）: 既存アップロード分があれば選択肢を表示 ---
     df = load_current_csv()
     options = build_options(df) if df is not None else []
-    return render_template("index.html", options=options)
+    return render_template(
+        "index.html", options=options, area_choices=build_area_choices()
+    )
+
+
+def build_area_choices() -> list[dict]:
+    """エリア選択プルダウン用の (内部キー, 表示名) の一覧を返す。"""
+    return [
+        {"key": area_key, "label": AREA_DISPLAY_NAMES.get(area_key, area_key)}
+        for area_key in AREA_DEFINITIONS.keys()
+    ]
 
 
 def handle_csv_upload(uploaded_file):
@@ -96,12 +119,12 @@ def handle_csv_upload(uploaded_file):
     except Exception as e:
         logger.exception("CSVの読み込みに失敗しました")
         return render_template(
-            "index.html", options=[], error=f"CSVの読み込みエラー: {e}"
+            "index.html", options=[], area_choices=build_area_choices(), error=f"CSVの読み込みエラー: {e}"
         )
 
     if df.empty:
         return render_template(
-            "index.html", options=[], error="CSVにデータがありません。"
+            "index.html", options=[], area_choices=build_area_choices(), error="CSVにデータがありません。"
         )
 
     try:
@@ -110,10 +133,15 @@ def handle_csv_upload(uploaded_file):
     except Exception:
         logger.exception("CSVの保存に失敗しました: %s", CURRENT_CSV_PATH)
         return render_template(
-            "index.html", options=[], error="CSVの保存に失敗しました。時間をおいて再度お試しください。"
+            "index.html",
+            options=[],
+            area_choices=build_area_choices(),
+            error="CSVの保存に失敗しました。時間をおいて再度お試しください。",
         )
 
-    return render_template("index.html", options=build_options(df))
+    return render_template(
+        "index.html", options=build_options(df), area_choices=build_area_choices()
+    )
 
 
 def handle_pdf_generation():
@@ -123,6 +151,7 @@ def handle_pdf_generation():
         return render_template(
             "index.html",
             options=[],
+            area_choices=build_area_choices(),
             error="CSVがアップロードされていません。先にCSVをアップロードしてください。",
         )
 
@@ -131,13 +160,17 @@ def handle_pdf_generation():
         row_index = int(request.form.get("row_index"))
     except (TypeError, ValueError):
         return render_template(
-            "index.html", options=build_options(df), error="選択内容が不正です。"
+            "index.html",
+            options=build_options(df),
+            area_choices=build_area_choices(),
+            error="選択内容が不正です。",
         )
 
     if row_index < 0 or row_index >= len(df):
         return render_template(
             "index.html",
             options=build_options(df),
+            area_choices=build_area_choices(),
             error="指定されたデータが見つかりません。",
         )
 
@@ -160,8 +193,118 @@ def handle_pdf_generation():
     except Exception as e:
         logger.exception("PDF生成中にエラーが発生しました")
         return render_template(
-            "index.html", options=build_options(df), error=f"PDF生成エラー: {e}"
+            "index.html",
+            options=build_options(df),
+            area_choices=build_area_choices(),
+            error=f"PDF生成エラー: {e}",
         )
+
+
+def handle_weekly_summary_report():
+    """フォームで指定された期間の「全体サマリー」PDFを生成して返す。"""
+    df = load_current_csv()
+    if df is None:
+        return render_template(
+            "index.html",
+            options=[],
+            area_choices=build_area_choices(),
+            error="CSVがアップロードされていません。先にCSVをアップロードしてください。",
+        )
+
+    start_date, end_date, error_response = _parse_date_range(
+        df, request.form.get("summary_start"), request.form.get("summary_end")
+    )
+    if error_response is not None:
+        return error_response
+
+    output_filename = os.path.join(tempfile.gettempdir(), "weekly_summary_report.pdf")
+    try:
+        generate_weekly_summary_report(output_filename, df, start_date, end_date)
+        return send_file(
+            output_filename, as_attachment=True, download_name="weekly_summary_report.pdf"
+        )
+    except Exception as e:
+        logger.exception("週間レポート（全体サマリー）生成中にエラーが発生しました")
+        return render_template(
+            "index.html",
+            options=build_options(df),
+            area_choices=build_area_choices(),
+            error=f"週間レポート生成エラー: {e}",
+        )
+
+
+def handle_weekly_area_report():
+    """フォームで指定された期間・エリアの「エリア別レポート」PDFを生成して返す。"""
+    df = load_current_csv()
+    if df is None:
+        return render_template(
+            "index.html",
+            options=[],
+            area_choices=build_area_choices(),
+            error="CSVがアップロードされていません。先にCSVをアップロードしてください。",
+        )
+
+    area_key = request.form.get("area_key")
+    if area_key not in AREA_DEFINITIONS:
+        return render_template(
+            "index.html",
+            options=build_options(df),
+            area_choices=build_area_choices(),
+            error="エリアを選択してください。",
+        )
+
+    start_date, end_date, error_response = _parse_date_range(
+        df, request.form.get("area_start"), request.form.get("area_end")
+    )
+    if error_response is not None:
+        return error_response
+
+    output_filename = os.path.join(tempfile.gettempdir(), "weekly_area_report.pdf")
+    try:
+        generate_weekly_area_report(output_filename, df, start_date, end_date, area_key)
+        return send_file(
+            output_filename, as_attachment=True, download_name="weekly_area_report.pdf"
+        )
+    except Exception as e:
+        logger.exception("週間レポート（エリア別）生成中にエラーが発生しました")
+        return render_template(
+            "index.html",
+            options=build_options(df),
+            area_choices=build_area_choices(),
+            error=f"週間レポート生成エラー: {e}",
+        )
+
+
+def _parse_date_range(df, start_raw, end_raw):
+    """
+    開始日・終了日の文字列を検証し、(start_date, end_date, None) を返す。
+    不正な場合は (None, None, render_templateのレスポンス) を返す。
+    """
+    start_date = pd.to_datetime(start_raw, errors="coerce")
+    end_date = pd.to_datetime(end_raw, errors="coerce")
+
+    if pd.isna(start_date) or pd.isna(end_date):
+        response = render_template(
+            "index.html",
+            options=build_options(df),
+            area_choices=build_area_choices(),
+            error="集計期間の開始日・終了日を正しく指定してください。",
+        )
+        return None, None, response
+
+    start_date = start_date.date()
+    end_date = end_date.date()
+
+    if start_date > end_date:
+        response = render_template(
+            "index.html",
+            options=build_options(df),
+            area_choices=build_area_choices(),
+            error="開始日は終了日より前の日付にしてください。",
+        )
+        return None, None, response
+
+    return start_date, end_date, None
 
 
 if __name__ == "__main__":

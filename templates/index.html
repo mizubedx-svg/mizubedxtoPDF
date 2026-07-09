@@ -30,5 +30,34 @@
     {% else %}
         <p>CSVがアップロードされていません。まずは上のフォームからアップロードしてください。</p>
     {% endif %}
+
+    <h2>3. 週間レポート（全体サマリー）を作成</h2>
+    {% if options %}
+        <form method="POST">
+            <label>開始日： <input type="date" name="summary_start" required></label>
+            <label>終了日： <input type="date" name="summary_end" required></label>
+            <button type="submit">全体サマリーPDFを作成</button>
+        </form>
+    {% else %}
+        <p>CSVがアップロードされていません。まずは上のフォームからアップロードしてください。</p>
+    {% endif %}
+
+    <h2>4. 週間レポート（エリア別）を作成</h2>
+    {% if options %}
+        <form method="POST">
+            <label>エリア：
+                <select name="area_key">
+                    {% for area in area_choices %}
+                        <option value="{{ area.key }}">{{ area.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>開始日： <input type="date" name="area_start" required></label>
+            <label>終了日： <input type="date" name="area_end" required></label>
+            <button type="submit">エリア別レポートPDFを作成</button>
+        </form>
+    {% else %}
+        <p>CSVがアップロードされていません。まずは上のフォームからアップロードしてください。</p>
+    {% endif %}
 </body>
 </html>
